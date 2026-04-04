@@ -10,7 +10,7 @@
 
 **Guidewire DEVTrails 2026 · Phase 1 Submission · The Zenithers · SRMIST Chennai**
 
-----
+--------
 ## 🚀 Quick Start (Docker Setup)
 
 This project has been fully containerized for seamless evaluation across any operating system.
