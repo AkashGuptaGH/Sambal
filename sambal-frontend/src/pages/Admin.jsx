@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { ShieldAlert, Users, TrendingUp, CheckCircle, Activity, BarChart3, AlertTriangle, Zap, CloudRain, ThermometerSun, Radio } from 'lucide-react';
+import { ShieldAlert, Users, TrendingUp, CheckCircle, Activity, BarChart3, AlertTriangle, Zap, CloudRain, ThermometerSun, Radio, TrendingDown } from 'lucide-react';
 import { MapContainer, TileLayer, CircleMarker, Tooltip } from 'react-leaflet';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { Button } from '../components/ui/Button';
 import 'leaflet/dist/leaflet.css';
 
@@ -53,26 +53,28 @@ const DISRUPTED_TRIGGERS = [
 ];
 
 export default function Admin() {
-  const [summary, setSummary] = useState(null);
+  const [summary, setSummary]       = useState(null);
   const [claimsFeed, setClaimsFeed] = useState([]);
+  const [forecast, setForecast]     = useState(null);
   const [simulating, setSimulating] = useState(false);
   const [simProgress, setSimProgress] = useState(0);
-  const [disrupted, setDisrupted] = useState(false);
-  const [simClaims, setSimClaims] = useState(0);
-  const [simPayout, setSimPayout] = useState(0);
+  const [disrupted, setDisrupted]   = useState(false);
+  const [simClaims, setSimClaims]   = useState(0);
+  const [simPayout, setSimPayout]   = useState(0);
 
-  // Chennai center
   const CHENNAI_CENTER = [13.0827, 80.2707];
 
   useEffect(() => {
     const fetchAdminData = async () => {
       try {
-        const [sumRes, claimsRes] = await Promise.all([
+        const [sumRes, claimsRes, forecastRes] = await Promise.all([
           fetch('http://127.0.0.1:8000/api/admin/summary'),
           fetch('http://127.0.0.1:8000/api/admin/claims-feed'),
+          fetch('http://127.0.0.1:8000/api/admin/predictive-forecast'),
         ]);
-        if (sumRes.ok) setSummary(await sumRes.json());
-        if (claimsRes.ok) setClaimsFeed(await claimsRes.json());
+        if (sumRes.ok)      setSummary(await sumRes.json());
+        if (claimsRes.ok)   setClaimsFeed(await claimsRes.json());
+        if (forecastRes.ok) setForecast(await forecastRes.json());
       } catch (err) {
         console.error('Failed to fetch admin data', err);
       }
@@ -204,7 +206,7 @@ export default function Admin() {
         )}
 
         {/* ── KPI Row ── */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
           <Card className={disrupted ? 'border-red-200 bg-red-50/30' : ''}>
             <CardContent className="p-4">
               <p className="text-xs font-semibold uppercase text-slate-500 flex items-center gap-2 mb-2">
@@ -237,6 +239,28 @@ export default function Admin() {
               {disrupted && <p className="text-[10px] text-red-500 font-bold mt-1">▲ Queued for payout</p>}
             </CardContent>
           </Card>
+
+          {/* ── Loss Ratio KPI (new) ── */}
+          <Card className={`${
+            summary?.loss_ratio > 70 ? 'border-red-300 bg-red-50'
+            : summary?.loss_ratio > 55 ? 'border-orange-200 bg-orange-50/30'
+            : 'border-emerald-200 bg-emerald-50/30'
+          }`}>
+            <CardContent className="p-4">
+              <p className="text-xs font-semibold uppercase text-slate-500 flex items-center gap-2 mb-2">
+                <TrendingDown className="w-4 h-4 text-orange-500" /> Loss Ratio
+              </p>
+              <h3 className={`text-2xl font-bold ${
+                summary?.loss_ratio > 70 ? 'text-red-700'
+                : summary?.loss_ratio > 55 ? 'text-orange-600'
+                : 'text-emerald-700'
+              }`}>
+                {summary ? `${summary.loss_ratio}%` : '...'}
+              </h3>
+              <p className="text-[10px] text-slate-400 mt-1">Target: &lt;60%</p>
+            </CardContent>
+          </Card>
+
           <Card className="border-orange-200 bg-orange-50/30">
             <CardContent className="p-4">
               <p className="text-xs font-semibold uppercase text-orange-600 flex items-center gap-2 mb-2">
@@ -474,46 +498,69 @@ export default function Admin() {
               </CardContent>
             </Card>
 
-            {/* Predictive Analytics */}
+            {/* Predictive Analytics — Live from API */}
             <Card>
               <CardHeader className="pb-3 border-b border-slate-100">
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-primary-500" /> Predictive Analytics
+                  <BarChart3 className="w-4 h-4 text-primary-500" /> Predictive Claim Analytics
                 </CardTitle>
-                <p className="text-xs mt-1 text-slate-500">Next Week Forecast</p>
+                <p className="text-xs mt-1 text-slate-500">
+                  7-Day Forecast · Open-Meteo + XGBoost Classifier
+                  {forecast && (
+                    <span className={`ml-2 font-bold text-[10px] uppercase px-1.5 py-0.5 rounded ${
+                      forecast.overall_risk_level === 'HIGH' ? 'bg-red-100 text-red-700'
+                      : forecast.overall_risk_level === 'MODERATE' ? 'bg-orange-100 text-orange-700'
+                      : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                      {forecast.overall_risk_level} RISK
+                    </span>
+                  )}
+                </p>
               </CardHeader>
               <CardContent className="p-4">
-                <div className="h-32 mb-4">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={pieData} innerRadius={35} outerRadius={50} paddingAngle={2} dataKey="value">
-                        {pieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip wrapperStyle={{ fontSize: '12px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mb-4">
-                  <span className="text-[10px] uppercase font-bold text-slate-500">Predicted Payout Range</span>
-                  <h4 className="text-lg font-bold text-slate-900">
-                    {disrupted ? '₹4.8L – ₹7.2L' : '₹2.1L – ₹3.4L'}
-                  </h4>
-                  {disrupted && <p className="text-[10px] text-red-500 font-bold">▲ Updated by simulation</p>}
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-500 flex items-center gap-1 mb-2">
-                    <AlertTriangle className="w-3 h-3" /> High Probability Zones (Rain)
-                  </span>
-                  <div className="flex flex-wrap gap-1">
-                    <span className="px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold rounded">Mumbai</span>
-                    <span className="px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold rounded">Kolkata</span>
-                    <span className={`px-2 py-1 text-[10px] font-bold rounded ${disrupted ? 'bg-red-100 text-red-700' : 'bg-blue-50 text-blue-700'}`}>
-                      Chennai {disrupted ? '🔴' : ''}
-                    </span>
-                  </div>
-                </div>
+                {forecast ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      <div className="bg-slate-50 rounded-xl p-3 text-center">
+                        <p className="text-lg font-bold text-slate-900">{forecast.total_predicted_claims.toLocaleString()}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Est. Claims</p>
+                      </div>
+                      <div className="bg-slate-50 rounded-xl p-3 text-center">
+                        <p className="text-lg font-bold text-slate-900">₹{(forecast.total_predicted_payout_inr / 100000).toFixed(1)}L</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Est. Payout</p>
+                      </div>
+                    </div>
+                    <div className="h-28 mb-3">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={forecast.daily_breakdown} margin={{ top: 0, right: 0, left: -28, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                          <XAxis dataKey="date" tickFormatter={(v) => v.slice(5)} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                          <RechartsTooltip
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', fontSize: '11px' }}
+                            formatter={(v, n) => [n === 'estimated_claims' ? `${v} claims` : `${v}mm`, n === 'estimated_claims' ? 'Est. Claims' : 'Rain']}
+                          />
+                          <Bar dataKey="estimated_claims" name="estimated_claims" fill="#0d3b4a" radius={[3, 3, 0, 0]} />
+                          <Bar dataKey="rain_mm" name="rain_mm" fill="#1fbba6" radius={[3, 3, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="space-y-1.5">
+                      {forecast.daily_breakdown.slice(0, 4).map((day, i) => (
+                        <div key={i} className={`flex justify-between items-center text-xs p-2 rounded-lg ${day.trigger_predicted ? 'bg-red-50 border border-red-100' : 'bg-slate-50'}`}>
+                          <span className="text-slate-600">{day.date?.slice(5) || `Day ${i+1}`}</span>
+                          <span className="text-slate-500">{day.rain_mm}mm</span>
+                          <span className={`font-bold text-[10px] ${day.trigger_predicted ? 'text-red-600' : 'text-emerald-600'}`}>
+                            {day.trigger_predicted ? `${day.estimated_claims} claims` : 'Clear'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-3 text-center">{forecast.weather_source}</p>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-slate-400 text-sm">Loading forecast…</div>
+                )}
               </CardContent>
             </Card>
 
