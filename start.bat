@@ -16,6 +16,7 @@ if not exist "venv" (
 )
 echo Activating virtual environment and installing requirements...
 call venv\Scripts\activate.bat
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 echo Backend setup complete.
 echo.
